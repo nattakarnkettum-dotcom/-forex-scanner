@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Forex Scanner — Live</title>
+<style>
+  :root {
+    --bg:       #0D1117;
+    --panel:    #161B22;
+    --header:   #1C2128;
+    --border:   #30363D;
+    --accent:   #58A6FF;
+    --bull:     #26A69A;
+    --bear:     #EF5350;
+    --buy:      #00E676;
+    --sell:     #FF1744;
+    --txt:      #E6EDF3;
+    --txt2:     #8B949E;
+    --gold:     #FFD700;
+    --orange:   #FF8C00;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--txt);
+    font-family: 'Courier New', 'Menlo', monospace;
+    font-size: 12px;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    background: var(--header);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  #topbar .brand { color: var(--accent); font-weight: bold; font-size: 13px; flex: 1; }
+  #topbar select, #topbar button {
+    background: var(--panel);
+    color: var(--txt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  #topbar select:focus { outline: none; border-color: var(--accent); }
+  #live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--buy); flex-shrink: 0;
+    animation: blink 2s infinite;
+  }
+  #live-dot.offline { background: var(--sell); animation: none; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ── API KEY SETUP SCREEN ── */
+  #setup-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 16px;
+  }
+  #setup-screen h2 { color: var(--accent); font-size: 18px; text-align: center; }
+  #setup-screen p  { color: var(--txt2); text-align: center; line-height: 1.6; max-width: 340px; }
+  #setup-screen input {
+    width: 100%; max-width: 360px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--txt);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+  #setup-screen input:focus { outline: none; border-color: var(--accent); }
+  #btn-connect {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 32px;
+    font-size: 14px;
+    font-weight: bold;
+    font-family: inherit;
+    cursor: pointer;
+    width: 100%; max-width: 360px;
+  }
+  #setup-error { color: var(--sell); font-size: 12px; min-height: 18px; }
+
+  /* ── TABS ── */
+  #tabs {
+    display: flex;
+    background: var(--header);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab {
+    flex: 1;
+    padding: 8px 4px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--txt2);
+    font-size: 11px;
+    border-bottom: 2px solid transparent;
+    transition: color .2s;
+  }
+  .tab.on { color: var(--txt); border-color: var(--accent); }
+
+  /* ── MAIN AREA ── */
+  #app { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+
+  /* ── SCANNER TAB ── */
+  #tab-scan {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  }
+  #grid-wrap { flex: 1; overflow-y: auto; padding: 5px; }
+  #chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px;
+  }
+  @media (min-width: 768px) {
+    #chart-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .cp {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color .25s, box-shadow .25s;
+    position: relative;
+  }
+  .cp.buy  { border-color: var(--buy);  box-shadow: 0 0 10px #00E67630; }
+  .cp.sell { border-color: var(--sell); box-shadow: 0 0 10px #FF174430; }
+
+  .cp-head {
+    background: var(--header);
+    padding: 5px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .cp-sym  { font-weight: bold; font-size: 11px; }
+  .cp-pr   { font-size: 10px; color: var(--txt2); }
+  .cp-sig  { font-size: 10px; font-weight: bold; }
+  .cp-sig.BUY  { color: var(--buy); }
+  .cp-sig.SELL { color: var(--sell); }
+  .cp-sig.NEUTRAL { color: var(--txt2); }
+
+  canvas.cc { display: block; width: 100%; height: 110px; }
+
+  .cp-foot {
+    background: var(--header);
+    padding: 3px 8px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--txt2);
+  }
+  .conf-strip {
+    position: absolute;
+    bottom: 20px; left: 0;
+    height: 2px;
+    transition: width .5s;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* ── SIGNAL TABLE ── */
+  #sig-panel {
+    flex-shrink: 0;
+    height: 190px;
+    border-top: 1px solid var(--border);
+    overflow-y: auto;
+    background: var(--panel);
+  }
+  #sig-panel .hdr {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--header);
+    padding: 4px 10px;
+    font-size: 10px;
+    color: var(--txt2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .stat-counts span { margin-left: 10px; }
+  .cb { color: var(--buy); font-weight: bold; }
+  .cs { color: var(--sell); font-weight: bold; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    background: var(--header);
+    color: var(--txt2);
+    padding: 4px 6px;
+    font-size: 9px;
+    position: sticky; top: 26px; z-index: 1;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 4px 6px; font-size: 10px; border-bottom: 1px solid #1C212820; text-align: center; }
+  tr:active td { background: #58A6FF10; }
+  .db { color: var(--buy); font-weight: bold; }
+  .ds { color: var(--sell); font-weight: bold; }
+  .ssb { color: #00E676; } .sb { color: #26A69A; }
+  .sn  { color: var(--txt2); }
+  .ss  { color: #EF5350; }  .sss{ color: #FF1744; }
+
+  /* ── SIGNAL DETAIL SHEET ── */
+  #detail-sheet {
+    position: fixed; bottom: -100%; left: 0; right: 0;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    padding: 16px;
+    transition: bottom .3s ease;
+    z-index: 100;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  #detail-sheet.open { bottom: 0; }
+  #detail-sheet h3 { font-size: 16px; margin-bottom: 12px; }
+  .detail-row {
+    display: flex; justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .detail-row .lbl { color: var(--txt2); }
+  .cond-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .cond-item {
+    background: var(--header);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #sheet-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: #00000080;
+    z-index: 99;
+  }
+  #sheet-overlay.open { display: block; }
+  #btn-close-sheet {
+    width: 100%;
+    background: var(--header);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--txt);
+    padding: 10px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+
+  /* ── HISTORY TAB ── */
+  #tab-hist { display: none; padding: 10px; overflow-y: auto; flex: 1; }
+  .hist-filter { display: flex; gap: 8px; margin-bottom: 10px; }
+  .hist-filter select {
+    background: var(--panel); color: var(--txt);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: inherit; font-size: 11px;
+    flex: 1;
+  }
+
+  /* ── SETTINGS TAB ── */
+  #tab-set { display: none; padding: 14px; overflow-y: auto; flex: 1; }
+  .set-group { margin-bottom: 20px; }
+  .set-group h3 {
+    color: var(--accent); font-size: 11px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px; margin-bottom: 10px;
+  }
+  .set-row {
+    display: flex; justify-content: space-between;
+    align-items: center; padding: 8px 0;
+    border-bottom: 1px solid #1C212840;
+  }
+  .set-row label { color: var(--txt); font-size: 12px; }
+  .set-row input, .set-row select {
+    background: var(--panel); color: var(--txt);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; font-family: inherit; font-size: 12px;
+    width: 130px;
+  }
+  .btn-full {
+    width: 100%; background: var(--panel);
+    border: 1px solid var(--accent); border-radius: 8px;
+    color: var(--accent); padding: 10px;
+    font-family: inherit; font-size: 13px;
+    cursor: pointer; margin-top: 10px;
+  }
+  .btn-danger {
+    border-color: var(--sell); color: var(--sell);
+  }
+  .api-info {
+    background: var(--header);
+    border-radius: 8px; padding: 10px 12px;
+    font-size: 11px; color: var(--txt2);
+    line-height: 1.7; margin-bottom: 12px;
+  }
+  .api-info b { color: var(--txt); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--header);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 12px;
+    z-index: 200;
+    max-width: 90vw;
+    text-align: center;
+    transition: transform .3s ease, opacity .3s;
+    opacity: 0;
+    pointer-events: none;
+    white-space: pre-line;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  #toast.buy  { border-color: var(--buy); }
+  #toast.sell { border-color: var(--sell); }
+
+  /* ── LOADING SPINNER ── */
+  .spinner {
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    width: 16px; height: 16px;
+    animation: spin .7s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <span class="brand">📊 FOREX SCANNER</span>
+  <div id="live-dot" class="offline"></div>
+  <span id="live-txt" style="font-size:10px;color:var(--txt2)">ยังไม่เชื่อมต่อ</span>
+  <select id="tf-sel" onchange="onTFChange()" style="display:none">
+    <option value="1min">M1</option>
+    <option value="5min" selected>M5</option>
+    <option value="15min">M15</option>
+    <option value="1h">H1</option>
+  </select>
+  <span id="clock" style="color:var(--accent);font-size:12px;font-weight:bold"></span>
+</div>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen">
+  <div style="font-size:40px">📡</div>
+  <h2>เชื่อมต่อราคา Forex จริง</h2>
+  <p>ใส่ TwelveData API Key เพื่อรับราคา Forex Real-time<br/>
+     สมัครฟรีได้ที่ <b style="color:var(--accent)">twelvedata.com</b></p>
+  <input id="api-input" type="text" placeholder="วาง API Key ที่นี่…"
+         autocomplete="off" autocorrect="off" spellcheck="false"/>
+  <div id="setup-error"></div>
+  <button id="btn-connect" onclick="connectAPI()">🔌 เชื่อมต่อ</button>
+  <p style="font-size:10px;color:var(--txt2)">Key ถูกเก็บในเครื่องคุณเท่านั้น ไม่ส่งไปที่อื่น</p>
+</div>
+
+<!-- MAIN APP (hidden until connected) -->
+<div id="app">
+  <div id="tabs">
+    <div class="tab on" onclick="showTab('scan')" id="t-scan">📡 Scanner</div>
+    <div class="tab"    onclick="showTab('hist')" id="t-hist">📋 ประวัติ</div>
+    <div class="tab"    onclick="showTab('set')"  id="t-set">⚙ ตั้งค่า</div>
+  </div>
+
+  <!-- SCANNER -->
+  <div id="tab-scan">
+    <div id="grid-wrap">
+      <div id="chart-grid"></div>
+    </div>
+    <div id="sig-panel">
+      <div class="hdr">
+        <span>🔔 Active Signals</span>
+        <span class="stat-counts">
+          <span class="cb">🟢 <span id="cnt-buy">0</span></span>
+          <span class="cs">🔴 <span id="cnt-sell">0</span></span>
+        </span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Symbol</th><th>Dir</th><th>Strength</th>
+          <th>Conf%</th><th>Price</th><th>RSI</th><th>Time</th>
+        </tr></thead>
+        <tbody id="sig-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="tab-hist">
+    <div class="hist-filter">
+      <select id="hf-sym" onchange="renderHist()"><option value="">All Symbols</option></select>
+      <select id="hf-dir" onchange="renderHist()">
+        <option value="">All</option>
+        <option value="BUY">BUY</option>
+        <option value="SELL">SELL</option>
+      </select>
+      <button onclick="clearHist()"
+        style="background:var(--panel);border:1px solid var(--border);border-radius:6px;
+               color:var(--txt2);padding:6px 10px;font-family:inherit;cursor:pointer;">
+        🗑
+      </button>
+    </div>
+    <table>
+      <thead><tr><th>เวลา</th><th>Symbol</th><th>Dir</th><th>Strength</th><th>Conf%</th><th>Price</th></tr></thead>
+      <tbody id="hist-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="tab-set">
+    <div class="api-info">
+      API Key: <b id="api-key-display">—</b><br/>
+      สถานะ: <b id="api-status-txt" style="color:var(--buy)">เชื่อมต่อแล้ว</b><br/>
+      คำขอวันนี้: <b id="api-calls">0</b> / 800 (ฟรี)
+    </div>
+
+    <div class="set-group">
+      <h3>📋 Symbols ที่สแกน</h3>
+      <div id="sym-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:6px;">
+        <input id="sym-add" placeholder="เพิ่ม เช่น GBP/JPY"
+          style="flex:1;background:var(--panel);border:1px solid var(--border);
+                 border-radius:6px;color:var(--txt);padding:8px;font-family:inherit;font-size:12px;"
+          onkeydown="if(event.key==='Enter')addSym()"/>
+        <button onclick="addSym()" class="btn-full" style="width:60px;margin:0;">+</button>
+      </div>
+    </div>
+
+    <div class="set-group">
+      <h3>⚙ Indicator Parameters</h3>
+      <div class="set-row"><label>EMA Fast</label><input id="p-ef" type="number" value="9"/></div>
+      <div class="set-row"><label>EMA Slow</label><input id="p-es" type="number" value="21"/></div>
+      <div class="set-row"><label>RSI Period</label><input id="p-rp" type="number" value="14"/></div>
+      <button class="btn-full" onclick="applyParams()">✅ Apply</button>
+    </div>
+
+    <div class="set-group">
+      <h3>🔐 API Key</h3>
+      <button class="btn-full btn-danger" onclick="resetKey()">🔄 เปลี่ยน API Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL SHEET -->
+<div id="sheet-overlay" onclick="closeSheet()"></div>
+<div id="detail-sheet">
+  <h3 id="sheet-title">—</h3>
+  <div id="sheet-body"></div>
+  <button id="btn-close-sheet" onclick="closeSheet()">ปิด</button>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const S = {
+  apiKey:   '',
+  tf:       '5min',
+  symbols:  ['EUR/USD','GBP/USD','USD/JPY','USD/CHF','AUD/USD','NZD/USD','USD/CAD','EUR/GBP'],
+  candles:  {},   // sym → [{o,h,l,c,t}]
+  signals:  {},   // sym → signal obj
+  history:  [],
+  params:   { ef:9, es:21, rp:14 },
+  apiCalls: 0,
+  lastAlert:{},
+  scanning: false,
+  fetchIdx: 0,    // round-robin symbol fetching to stay in rate limit
+};
+
+const DIGITS = (sym) => sym.includes('JPY') ? 3 : 5;
+
+// ═══════════════════════════════════════
+// API + CONNECT
+// ═══════════════════════════════════════
+async function connectAPI() {
+  const key = document.getElementById('api-input').value.trim();
+  if (!key) { setErr('กรุณาใส่ API Key'); return; }
+
+  const btn = document.getElementById('btn-connect');
+  btn.innerHTML = '<span class="spinner"></span> กำลังตรวจสอบ…';
+  btn.disabled = true;
+  setErr('');
+
+  try {
+    const sym = encodeURIComponent('EUR/USD');
+    const url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=5min&outputsize=5&apikey=${key}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.status === 'error' || data.code === 401) {
+      throw new Error(data.message || 'API Key ไม่ถูกต้อง');
+    }
+    if (!data.values || data.values.length === 0) {
+      throw new Error('ไม่ได้รับข้อมูล กรุณาลองใหม่');
+    }
+
+    S.apiKey = key;
+    localStorage.setItem('td_key', key);
+    launchApp();
+  } catch(e) {
+    setErr('❌ ' + e.message);
+    btn.innerHTML = '🔌 เชื่อมต่อ';
+    btn.disabled = false;
+  }
+}
+
+function setErr(msg) {
+  document.getElementById('setup-error').textContent = msg;
+}
+
+function launchApp() {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('app').style.flexDirection = 'column';
+  document.getElementById('tf-sel').style.display = '';
+
+  // Show masked key in settings
+  const masked = S.apiKey.slice(0,6) + '••••••••' + S.apiKey.slice(-4);
+  document.getElementById('api-key-display').textContent = masked;
+
+  buildGrid();
+  startScanning();
+  setInterval(clock, 1000); clock();
+}
+
+// ═══════════════════════════════════════
+// FETCH REAL PRICES (TwelveData)
+// ═══════════════════════════════════════
+async function fetchSymbol(sym) {
+  const encoded = encodeURIComponent(sym);
+  const url = `https://api.twelvedata.com/time_series?symbol=${encoded}&interval=${S.tf}&outputsize=80&apikey=${S.apiKey}`;
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    S.apiCalls++;
+    document.getElementById('api-calls').textContent = S.apiCalls;
+
+    if (data.status === 'error') {
+      console.warn(sym, data.message);
+      return;
+    }
+    if (!data.values) return;
+
+    // TwelveData returns newest-first → reverse
+    const candles = data.values.reverse().map(v => ({
+      t: v.datetime,
+      o: +v.open,
+      h: +v.high,
+      l: +v.low,
+      c: +v.close,
+    }));
+    S.candles[sym] = candles;
+
+    const sig = computeSignal(sym);
+    if (sig) {
+      const prev = S.signals[sym];
+      S.signals[sym] = sig;
+      checkNewSignal(sym, sig, prev);
+      updatePanel(sym);
+    }
+  } catch(e) {
+    console.warn('fetch error', sym, e.message);
+  }
+}
+
+// ═══════════════════════════════════════
+// ROUND-ROBIN SCAN (avoid rate limit)
+// ═══════════════════════════════════════
+function startScanning() {
+  S.scanning = true;
+  setLive(true);
+  // Fetch all symbols once first
+  S.symbols.forEach((sym, i) => setTimeout(() => fetchSymbol(sym), i * 800));
+  // Then rotate: fetch one symbol every 3 seconds
+  setInterval(() => {
+    if (!S.scanning) return;
+    const sym = S.symbols[S.fetchIdx % S.symbols.length];
+    S.fetchIdx++;
+    fetchSymbol(sym);
+  }, 3000);
+}
+
+function setLive(on) {
+  const dot = document.getElementById('live-dot');
+  const txt = document.getElementById('live-txt');
+  dot.className = on ? '' : 'offline';
+  txt.textContent = on ? 'LIVE' : 'ออฟไลน์';
+  txt.style.color = on ? 'var(--buy)' : 'var(--sell)';
+}
+
+// ═══════════════════════════════════════
+// INDICATORS
+// ═══════════════════════════════════════
+function ema(arr, period) {
+  const k = 2 / (period + 1), out = new Array(arr.length).fill(NaN);
+  let sum = 0;
+  for (let i = 0; i < arr.length; i++) {
+    if (i < period - 1) { sum += arr[i]; continue; }
+    if (i === period - 1) { out[i] = (sum + arr[i]) / period; continue; }
+    out[i] = arr[i] * k + out[i-1] * (1 - k);
+  }
+  return out;
+}
+
+function rsi(arr, period = 14) {
+  const out = new Array(arr.length).fill(50);
+  if (arr.length < period + 1) return out;
+  let g = 0, l = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = arr[i] - arr[i-1];
+    d > 0 ? g += d : l -= d;
+  }
+  let ag = g/period, al = l/period;
+  out[period] = al === 0 ? 100 : 100 - 100/(1 + ag/al);
+  for (let i = period+1; i < arr.length; i++) {
+    const d = arr[i] - arr[i-1];
+    ag = (ag*(period-1) + Math.max(d,0)) / period;
+    al = (al*(period-1) + Math.max(-d,0)) / period;
+    out[i] = al === 0 ? 100 : 100 - 100/(1 + ag/al);
+  }
+  return out;
+}
+
+function computeSignal(sym) {
+  const candles = S.candles[sym];
+  if (!candles || candles.length < 35) return null;
+  const p = S.params;
+  const closes = candles.map(c => c.c);
+  const ef  = ema(closes, p.ef);
+  const es  = ema(closes, p.es);
+  const rv  = rsi(closes, p.rp);
+  const n   = candles.length - 1;
+  const cur = candles[n], prev = candles[n-1];
+  const bull = cur.c >= cur.o;
+  const bbMid = closes.slice(n-19, n+1).reduce((a,b)=>a+b,0) / 20;
+  const atr = candles.slice(n-13, n+1).reduce((a,c)=>a+(c.h-c.l),0)/14;
+
+  // Conditions
+  const W = {ema:30, rsi:20, macd:25, candle:15, bb:10};
+  let bs=0, ss=0;
+  const bc={}, sc={};
+
+  bc.ema    = ef[n] > es[n];              if(bc.ema)    bs += W.ema;
+  bc.rsi    = rv[n] > 50;                 if(bc.rsi)    bs += W.rsi;
+  bc.macd   = (ef[n]-es[n]) > (ef[n-1]-es[n-1]); if(bc.macd) bs += W.macd;
+  bc.candle = bull;                        if(bc.candle) bs += W.candle;
+  bc.bb     = cur.c > bbMid;              if(bc.bb)     bs += W.bb;
+
+  sc.ema    = ef[n] < es[n];              if(sc.ema)    ss += W.ema;
+  sc.rsi    = rv[n] < 50;                 if(sc.rsi)    ss += W.rsi;
+  sc.macd   = (ef[n]-es[n]) < (ef[n-1]-es[n-1]); if(sc.macd) ss += W.macd;
+  sc.candle = !bull;                       if(sc.candle) ss += W.candle;
+  sc.bb     = cur.c < bbMid;              if(sc.bb)     ss += W.bb;
+
+  let dir, conf, conds;
+  if (bs > ss && bs > 30)       { dir='BUY';  conf=Math.min(bs,100); conds=bc; }
+  else if (ss > bs && ss > 30)  { dir='SELL'; conf=Math.min(ss,100); conds=sc; }
+  else                           { dir='NEUTRAL'; conf=50; conds={}; }
+
+  const strength =
+    dir==='BUY'  && conf>=80 ? 'Strong Buy'  :
+    dir==='BUY'              ? 'Buy'          :
+    dir==='SELL' && conf>=80 ? 'Strong Sell' :
+    dir==='SELL'             ? 'Sell'         : 'Neutral';
+
+  const d = DIGITS(sym);
+  const sl = dir==='BUY'  ? +(cur.c - 1.5*atr).toFixed(d) :
+             dir==='SELL' ? +(cur.c + 1.5*atr).toFixed(d) : null;
+  const tp = dir==='BUY'  ? +(cur.c + 2.0*atr).toFixed(d) :
+             dir==='SELL' ? +(cur.c - 2.0*atr).toFixed(d) : null;
+
+  return { dir, strength, conf, rsi:rv[n], price:cur.c, sl, tp,
+           ef:ef.slice(-60), es_:es.slice(-60), conds, atr, time:Date.now() };
+}
+
+// ═══════════════════════════════════════
+// NEW SIGNAL DETECTION
+// ═══════════════════════════════════════
+function checkNewSignal(sym, sig, prev) {
+  if (sig.dir === 'NEUTRAL' || sig.conf < 60) return;
+  const COOLDOWN = 120000; // 2 min
+  if (Date.now() - (S.lastAlert[sym]||0) < COOLDOWN) return;
+  if (prev && prev.dir === sig.dir) return; // same direction, not new
+
+  S.lastAlert[sym] = Date.now();
+  S.history.push({ sym, ...sig });
+
+  // Update history filter
+  const hf = document.getElementById('hf-sym');
+  if (![...hf.options].map(o=>o.value).includes(sym)) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = sym;
+    hf.appendChild(opt);
+  }
+
+  const arr = sig.dir==='BUY' ? '🟢 ↑' : '🔴 ↓';
+  toast(`${arr} ${sym}\n${sig.strength}  ${sig.conf.toFixed(0)}%`, sig.dir==='BUY'?'buy':'sell');
+}
+
+// ═══════════════════════════════════════
+// GRID / PANEL
+// ═══════════════════════════════════════
+function buildGrid() {
+  const g = document.getElementById('chart-grid');
+  g.innerHTML = '';
+  S.symbols.forEach(sym => {
+    const p = document.createElement('div');
+    p.className = 'cp';
+    p.id = `cp-${eid(sym)}`;
+    p.innerHTML = `
+      <div class="cp-head">
+        <span class="cp-sym">${sym}</span>
+        <span class="cp-pr" id="pr-${eid(sym)}">…</span>
+        <span class="cp-sig NEUTRAL" id="sg-${eid(sym)}">—</span>
+      </div>
+      <canvas class="cc" id="cv-${eid(sym)}"></canvas>
+      <div class="conf-strip" id="cs-${eid(sym)}" style="width:0;background:var(--txt2)"></div>
+      <div class="cp-foot">
+        <span>RSI: <span id="ri-${eid(sym)}">—</span></span>
+        <span id="tf-lbl-${eid(sym)}" style="color:var(--accent)">${tfLabel()}</span>
+        <span id="bar-${eid(sym)}" style="color:var(--txt2)">⏱—</span>
+      </div>`;
+    p.onclick = () => openSheet(sym);
+    g.appendChild(p);
+  });
+  renderSymList();
+
+  // Update bt sym list
+  document.getElementById('hf-sym').innerHTML = '<option value="">All Symbols</option>';
+}
+
+function eid(sym) { return sym.replace('/','_'); }
+function tfLabel() {
+  const m = {'1min':'M1','5min':'M5','15min':'M15','1h':'H1'};
+  return m[S.tf]||S.tf;
+}
+
+function updatePanel(sym) {
+  const sig = S.signals[sym];
+  const arr = S.candles[sym];
+  if (!arr || arr.length === 0) return;
+
+  const id  = eid(sym);
+  const d   = DIGITS(sym);
+  const price = arr[arr.length-1].c.toFixed(d);
+
+  const pr  = document.getElementById(`pr-${id}`);
+  const sg  = document.getElementById(`sg-${id}`);
+  const ri  = document.getElementById(`ri-${id}`);
+  const cs  = document.getElementById(`cs-${id}`);
+  const cp  = document.getElementById(`cp-${id}`);
+  const cv  = document.getElementById(`cv-${id}`);
+  const bar = document.getElementById(`bar-${id}`);
+  if (!pr) return;
+
+  pr.textContent = price;
+
+  if (sig) {
+    sg.textContent = `${sig.strength} ${sig.conf.toFixed(0)}%`;
+    sg.className   = `cp-sig ${sig.dir}`;
+    ri.textContent = sig.rsi.toFixed(1);
+    cs.style.width  = sig.conf + '%';
+    cs.style.background = sig.dir==='BUY' ? 'var(--buy)' : sig.dir==='SELL' ? 'var(--sell)' : 'var(--txt2)';
+    cp.className = `cp${sig.dir==='BUY'?' buy':sig.dir==='SELL'?' sell':''}`;
+
+    // Bar countdown (approximate)
+    const tfSec = {'1min':60,'5min':300,'15min':900,'1h':3600}[S.tf]||300;
+    const lastT  = new Date(arr[arr.length-1].t).getTime() / 1000;
+    const remain = Math.max(0, tfSec - (Date.now()/1000 - lastT));
+    const mm = Math.floor(remain/60), ss2 = Math.floor(remain%60);
+    bar.textContent = `⏱${mm}:${ss2.toString().padStart(2,'0')}`;
+  }
+
+  if (cv) drawCandles(sym, cv);
+}
+
+// ═══════════════════════════════════════
+// CANVAS CHART
+// ═══════════════════════════════════════
+function drawCandles(sym, cv) {
+  const candles = S.candles[sym];
+  const sig = S.signals[sym];
+  if (!candles || candles.length < 5) return;
+  const W = cv.width = cv.offsetWidth;
+  const H = cv.height = 110;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0D1117'; ctx.fillRect(0,0,W,H);
+
+  const data = candles.slice(-50);
+  const n = data.length;
+  const hi = Math.max(...data.map(c=>c.h));
+  const lo = Math.min(...data.map(c=>c.l));
+  const rng = hi - lo || 1e-9;
+  const py = v => H - H*(v-lo)/rng;
+  const cw = Math.max(2, Math.floor(W/n) - 1);
+
+  // Grid
+  ctx.strokeStyle='#1C2128'; ctx.lineWidth=1;
+  [.25,.5,.75].forEach(f=>{ctx.beginPath();ctx.moveTo(0,H*f);ctx.lineTo(W,H*f);ctx.stroke();});
+
+  // Candles
+  data.forEach((c,i)=>{
+    const x  = i*(cw+1);
+    const cx = x+cw/2;
+    const bull = c.c >= c.o;
+    const col  = bull ? '#26A69A' : '#EF5350';
+    ctx.strokeStyle = col; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx,py(c.h)); ctx.lineTo(cx,py(c.l)); ctx.stroke();
+    ctx.fillStyle=col;
+    const by=py(Math.max(c.o,c.c)), bh=Math.max(1,Math.abs(py(c.o)-py(c.c)));
+    ctx.fillRect(x,by,cw,bh);
+  });
+
+  // EMA lines
+  if (sig) {
+    [[sig.ef,'#FFD700'],[sig.es_,'#FF8C00']].forEach(([arr,col])=>{
+      if (!arr) return;
+      ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath();
+      let first=true;
+      arr.slice(-n).forEach((v,i)=>{
+        if (isNaN(v)) return;
+        const x=i*(cw+1)+cw/2;
+        first ? ctx.moveTo(x,py(v)) : ctx.lineTo(x,py(v));
+        first=false;
+      });
+      ctx.stroke();
+    });
+
+    // Arrow
+    if (sig.dir !== 'NEUTRAL') {
+      const ax = (n-1)*(cw+1)+cw/2;
+      ctx.lineWidth=2;
+      if (sig.dir==='BUY') {
+        ctx.strokeStyle='#00E676';
+        const ay=py(lo)-4;
+        ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax,ay-14); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ax-6,ay-8); ctx.lineTo(ax,ay-14); ctx.lineTo(ax+6,ay-8); ctx.stroke();
+      } else {
+        ctx.strokeStyle='#FF1744';
+        const ay=py(hi)+4;
+        ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax,ay+14); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ax-6,ay+8); ctx.lineTo(ax,ay+14); ctx.lineTo(ax+6,ay+8); ctx.stroke();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+// SIGNAL TABLE
+// ═══════════════════════════════════════
+function updateSigTable() {
+  const rows = Object.entries(S.signals)
+    .filter(([,s])=>s && s.dir!=='NEUTRAL')
+    .sort((a,b)=>b[1].conf-a[1].conf);
+
+  document.getElementById('cnt-buy').textContent  = rows.filter(([,s])=>s.dir==='BUY').length;
+  document.getElementById('cnt-sell').textContent = rows.filter(([,s])=>s.dir==='SELL').length;
+
+  const SC = {'Strong Buy':'ssb','Buy':'sb','Neutral':'sn','Sell':'ss','Strong Sell':'sss'};
+  document.getElementById('sig-tbody').innerHTML = rows.map(([sym,s])=>{
+    const d = DIGITS(sym);
+    const t = new Date(s.time).toLocaleTimeString('th-TH');
+    return `<tr onclick="openSheet('${sym}')">
+      <td style="font-weight:bold">${sym}</td>
+      <td class="${s.dir==='BUY'?'db':'ds'}">${s.dir}</td>
+      <td class="${SC[s.strength]||''}">${s.strength}</td>
+      <td>${s.conf.toFixed(0)}%</td>
+      <td>${s.price.toFixed(d)}</td>
+      <td>${s.rsi.toFixed(1)}</td>
+      <td style="color:var(--txt2)">${t}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════
+// DETAIL SHEET
+// ═══════════════════════════════════════
+function openSheet(sym) {
+  const sig = S.signals[sym];
+  if (!sig) return;
+  const d = DIGITS(sym);
+  const SC = {'Strong Buy':'ssb','Buy':'sb','Neutral':'sn','Sell':'ss','Strong Sell':'sss'};
+  const condNames = {ema:'EMA Cross',rsi:'RSI Position',macd:'MACD Momentum',candle:'Candle Color',bb:'BB Position'};
+  const condHtml = Object.entries(sig.conds||{}).map(([k,v])=>`
+    <div class="cond-item">
+      <span style="color:${v?'var(--buy)':'var(--sell)'}">${v?'✅':'❌'}</span>
+      <span>${condNames[k]||k}</span>
+    </div>`).join('');
+
+  document.getElementById('sheet-title').innerHTML =
+    `${sym} — <span class="${SC[sig.strength]||''}">${sig.strength}</span>`;
+  document.getElementById('sheet-body').innerHTML = `
+    <div class="detail-row"><span class="lbl">ทิศทาง</span>
+      <b class="${sig.dir==='BUY'?'db':'ds'}">${sig.dir}</b></div>
+    <div class="detail-row"><span class="lbl">ความมั่นใจ</span>
+      <b style="color:var(--accent)">${sig.conf.toFixed(1)}%</b></div>
+    <div class="detail-row"><span class="lbl">ราคาปัจจุบัน</span>
+      <b>${sig.price.toFixed(d)}</b></div>
+    <div class="detail-row"><span class="lbl">RSI</span>
+      <b style="color:${sig.rsi>70?'var(--sell)':sig.rsi<30?'var(--buy)':'var(--txt)'}">${sig.rsi.toFixed(1)}</b></div>
+    <div class="detail-row"><span class="lbl">Stop Loss</span>
+      <b style="color:var(--sell)">${sig.sl||'—'}</b></div>
+    <div class="detail-row"><span class="lbl">Take Profit</span>
+      <b style="color:var(--buy)">${sig.tp||'—'}</b></div>
+    <div style="margin-top:12px;font-size:10px;color:var(--txt2);margin-bottom:6px;">เงื่อนไขสัญญาณ</div>
+    <div class="cond-grid">${condHtml}</div>
+    <div style="margin-top:14px;padding:10px;background:var(--header);border-radius:8px;font-size:11px;color:var(--txt2);line-height:1.7;">
+      ⚠️ นี่คือสัญญาณช่วยตัดสินใจเท่านั้น<br/>
+      กรุณาเปิด Order ใน <b style="color:var(--accent)">MT5 Mobile</b> ด้วยตัวเอง<br/>
+      ใช้ SL/TP ทุกครั้งเพื่อบริหารความเสี่ยง
+    </div>`;
+
+  document.getElementById('detail-sheet').classList.add('open');
+  document.getElementById('sheet-overlay').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('detail-sheet').classList.remove('open');
+  document.getElementById('sheet-overlay').classList.remove('open');
+}
+
+// ═══════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════
+function renderHist() {
+  const sf = document.getElementById('hf-sym').value;
+  const df = document.getElementById('hf-dir').value;
+  const SC = {'Strong Buy':'ssb','Buy':'sb','Neutral':'sn','Sell':'ss','Strong Sell':'sss'};
+  const rows = S.history.filter(h=>(!sf||h.sym===sf)&&(!df||h.dir===df)).slice(-100).reverse();
+  document.getElementById('hist-tbody').innerHTML = rows.map(h=>`
+    <tr onclick="openSheet('${h.sym}')">
+      <td style="color:var(--txt2)">${new Date(h.time).toLocaleTimeString('th-TH')}</td>
+      <td style="font-weight:bold">${h.sym}</td>
+      <td class="${h.dir==='BUY'?'db':'ds'}">${h.dir}</td>
+      <td class="${SC[h.strength]||''}">${h.strength}</td>
+      <td>${h.conf.toFixed(0)}%</td>
+      <td>${h.price.toFixed(DIGITS(h.sym))}</td>
+    </tr>`).join('');
+}
+
+function clearHist() { S.history=[]; renderHist(); }
+
+// ═══════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════
+function renderSymList() {
+  document.getElementById('sym-list').innerHTML = S.symbols.map(s=>`
+    <div style="background:var(--header);border:1px solid var(--border);border-radius:6px;
+                padding:4px 10px;font-size:11px;display:flex;align-items:center;gap:6px;cursor:pointer;"
+         onclick="removeSym('${s}')">
+      ${s} <span style="color:var(--sell);font-size:10px;">✕</span>
+    </div>`).join('');
+}
+
+function addSym() {
+  const inp = document.getElementById('sym-add');
+  let sym = inp.value.trim().toUpperCase();
+  if (!sym) return;
+  // Normalize: EURUSD → EUR/USD
+  if (sym.length === 6 && !sym.includes('/')) sym = sym.slice(0,3)+'/'+sym.slice(3);
+  if (!S.symbols.includes(sym)) {
+    S.symbols.push(sym);
+    buildGrid();
+    fetchSymbol(sym);
+  }
+  inp.value='';
+}
+
+function removeSym(sym) {
+  S.symbols = S.symbols.filter(s=>s!==sym);
+  delete S.signals[sym];
+  delete S.candles[sym];
+  buildGrid();
+}
+
+function applyParams() {
+  S.params = {
+    ef: parseInt(document.getElementById('p-ef').value)||9,
+    es: parseInt(document.getElementById('p-es').value)||21,
+    rp: parseInt(document.getElementById('p-rp').value)||14,
+  };
+  // Recompute all signals
+  S.symbols.forEach(sym => {
+    const sig = computeSignal(sym);
+    if (sig) { S.signals[sym]=sig; updatePanel(sym); }
+  });
+  toast('✅ ปรับ Indicator แล้ว', 'buy');
+}
+
+function resetKey() {
+  if (!confirm('ยืนยันการเปลี่ยน API Key?')) return;
+  localStorage.removeItem('td_key');
+  location.reload();
+}
+
+// ═══════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════
+function showTab(name) {
+  ['scan','hist','set'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t===name ? (t==='scan'?'flex':'block') : 'none';
+    document.getElementById(`t-${t}`).className = `tab${t===name?' on':''}`;
+  });
+  if (name==='hist') renderHist();
+}
+
+function onTFChange() {
+  S.tf = document.getElementById('tf-sel').value;
+  document.querySelectorAll('[id^="tf-lbl-"]').forEach(el=>el.textContent=tfLabel());
+  S.candles={}; S.signals={};
+  S.symbols.forEach((sym,i) => setTimeout(()=>fetchSymbol(sym), i*600));
+}
+
+function toast(msg, type='buy') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `show ${type}`;
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>t.className='', 4000);
+}
+
+function clock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('th-TH');
+  // Refresh panel countdowns and signal table every second
+  if (S.scanning) {
+    S.symbols.forEach(sym => { if(S.signals[sym]) updatePanel(sym); });
+    updateSigTable();
+  }
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+window.addEventListener('load', () => {
+  // Auto-connect if key saved
+  const saved = localStorage.getItem('td_key');
+  if (saved) {
+    document.getElementById('api-input').value = saved;
+    // Pre-fill and try to connect silently
+    S.apiKey = saved;
+    launchApp();
+  }
+});
+</script>
+</body>
+</html>
