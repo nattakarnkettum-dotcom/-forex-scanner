@@ -141,6 +141,24 @@ tr:active td{background:#58A6FF10}
 #toast.sell{border-color:var(--sell)}
 #toast.warn{border-color:var(--warn)}
 
+/* BANG POPUP */
+#bang-popup{position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .2s}
+#bang-popup.show{opacity:1;pointer-events:all}
+#bang-bg{position:absolute;inset:0;background:#00000090}
+#bang-box{position:relative;z-index:1;border-radius:24px;padding:32px 40px;text-align:center;min-width:280px;animation:bangpop .3s cubic-bezier(.17,.67,.35,1.3)}
+#bang-box.buy-box{background:linear-gradient(135deg,#0a2a1a,#0d3d22);border:2px solid var(--buy);box-shadow:0 0 40px #00E67660}
+#bang-box.sell-box{background:linear-gradient(135deg,#2a0a0a,#3d0d0d);border:2px solid var(--sell);box-shadow:0 0 40px #FF174460}
+@keyframes bangpop{0%{transform:scale(.5);opacity:0}100%{transform:scale(1);opacity:1}}
+#bang-word{font-size:56px;font-weight:900;letter-spacing:4px;text-shadow:0 0 20px currentColor;margin-bottom:4px}
+#bang-word.buy-word{color:var(--buy)}
+#bang-word.sell-word{color:var(--sell)}
+#bang-hl{font-size:22px;font-weight:800;margin-bottom:12px;letter-spacing:2px}
+#bang-sym{font-size:18px;font-weight:700;color:#fff;margin-bottom:4px}
+#bang-conf{font-size:13px;margin-bottom:20px;opacity:.8;color:#fff}
+#bang-rr{font-size:12px;margin-bottom:20px;opacity:.7;color:#fff}
+#bang-close{background:#ffffff20;border:1px solid #ffffff30;border-radius:10px;color:#fff;padding:10px 28px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+
+
 .spinner{border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;width:14px;height:14px;animation:spin .7s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
@@ -766,16 +784,68 @@ function drawChart(sym,cv){
       ctx.stroke();
     });
     if(sig.dir!=='NEUTRAL'&&sig.tradeable){
-      const ax=(n-1)*(cw+1)+cw/2;ctx.lineWidth=2;
-      if(sig.dir==='BUY'){
-        ctx.strokeStyle='#00E676';const ay=py(lo)-3;
-        ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax,ay-12);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(ax-5,ay-7);ctx.lineTo(ax,ay-12);ctx.lineTo(ax+5,ay-7);ctx.stroke();
+      const ax=(n-1)*(cw+1)+cw/2;
+      const isBuy=sig.dir==='BUY';
+      const sigColor=isBuy?'#00E676':'#FF1744';
+      const sigColorDim=isBuy?'#00E67640':'#FF174440';
+
+      // Glow circle behind arrow
+      const glowY=isBuy?py(lo)-18:py(hi)+18;
+      const grad=ctx.createRadialGradient(ax,glowY,2,ax,glowY,18);
+      grad.addColorStop(0,isBuy?'#00E67680':'#FF174480');
+      grad.addColorStop(1,'transparent');
+      ctx.beginPath();ctx.arc(ax,glowY,18,0,Math.PI*2);
+      ctx.fillStyle=grad;ctx.fill();
+
+      // Triangle arrow (big)
+      ctx.beginPath();
+      if(isBuy){
+        ctx.moveTo(ax,glowY-12);
+        ctx.lineTo(ax-10,glowY+6);
+        ctx.lineTo(ax+10,glowY+6);
       }else{
-        ctx.strokeStyle='#FF1744';const ay=py(hi)+3;
-        ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax,ay+12);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(ax-5,ay+7);ctx.lineTo(ax,ay+12);ctx.lineTo(ax+5,ay+7);ctx.stroke();
+        ctx.moveTo(ax,glowY+12);
+        ctx.lineTo(ax-10,glowY-6);
+        ctx.lineTo(ax+10,glowY-6);
       }
+      ctx.closePath();
+      ctx.fillStyle=sigColor;ctx.fill();
+
+      // BANG / SHOT label
+      const label=sig.conf>=80?'BANG':'SHOT';
+      const labelY=isBuy?glowY-18:glowY+26;
+      ctx.font='bold 9px Consolas,monospace';
+      ctx.textAlign='center';
+      // Shadow
+      ctx.fillStyle='#000';
+      ctx.fillText(label,ax+1,labelY+1);
+      // Text
+      ctx.fillStyle=sigColor;
+      ctx.fillText(label,ax,labelY);
+
+      // HIGHER / LOWER label at top
+      const hlLabel=isBuy?'HIGHER':'LOWER';
+      ctx.font='bold 8px Consolas,monospace';
+      ctx.fillStyle=sigColor;
+      ctx.fillText(hlLabel,ax,isBuy?glowY-26:glowY+38);
+      ctx.textAlign='left';
+
+      // Confidence bar on last candle
+      const barW=cw*2;
+      const barX=ax-cw;
+      const barY=isBuy?py(lo)+4:py(hi)-8;
+      ctx.fillStyle=sigColorDim;
+      ctx.fillRect(barX,barY,barW,4);
+      ctx.fillStyle=sigColor;
+      ctx.fillRect(barX,barY,barW*(sig.conf/100),4);
+    }else if(sig.dir!=='NEUTRAL'&&!sig.tradeable){
+      // No-trade warning X
+      const ax=(n-1)*(cw+1)+cw/2;
+      ctx.font='bold 14px Consolas';
+      ctx.textAlign='center';
+      ctx.fillStyle='#FFB30080';
+      ctx.fillText('✕',ax,H/2);
+      ctx.textAlign='left';
     }
   }
 }
@@ -824,6 +894,7 @@ function checkNew(sym,sig,prev){
       const o=document.createElement('option');o.value=o.textContent=sym;hf.appendChild(o);
     }
     toast(`${sig.dir==='BUY'?'🟢↑':'🔴↓'} ${sym}\n${sig.strength} ${sig.conf.toFixed(0)}%\nRR 1:${sig.rr}`,sig.dir==='BUY'?'buy':'sell');
+    if(sig.conf>=65) showBang(sym, sig);
   } else if(!sig.tradeable){
     toast(`⚠ ${sym} — ไม่แนะนำเทรด\n${sig.warnings[0]||''}`, 'warn');
   }
@@ -1028,11 +1099,68 @@ function clock(){
   if(S.apiKey){S.symbols.forEach(sym=>{if(S.signals[sym])updatePanel(sym)});updateSigTable()}
 }
 
-// INIT 
+
+// ═══════════════════════════════════════════
+// BANG POPUP
+// ═══════════════════════════════════════════
+function showBang(sym, sig){
+  const isBuy = sig.dir === 'BUY';
+  const word = sig.conf >= 80 ? 'BANG' : 'SHOT';
+  const d = DIGITS(sym);
+
+  document.getElementById('bang-word').textContent = word;
+  document.getElementById('bang-word').className = isBuy ? 'buy-word' : 'sell-word';
+  document.getElementById('bang-box').className = isBuy ? 'buy-box' : 'sell-box';
+  document.getElementById('bang-hl').textContent = isBuy ? '▲ HIGHER' : '▼ LOWER';
+  document.getElementById('bang-hl').style.color = isBuy ? 'var(--buy)' : 'var(--sell)';
+  document.getElementById('bang-sym').textContent = sym;
+  document.getElementById('bang-conf').textContent = `Confidence: ${sig.conf.toFixed(0)}%  |  RSI: ${sig.rsi.toFixed(1)}`;
+  document.getElementById('bang-rr').textContent = `RR 1:${sig.rr}  |  SL: ${sig.sl||'—'}  |  TP: ${sig.tp||'—'}`;
+
+  document.getElementById('bang-popup').classList.add('show');
+
+  // Play beep sound
+  try {
+    const ctx2 = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = ctx2.createOscillator();
+    const gain = ctx2.createGain();
+    osc.connect(gain); gain.connect(ctx2.destination);
+    osc.frequency.value = isBuy ? 880 : 440;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx2.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx2.currentTime + 0.4);
+    osc.start(); osc.stop(ctx2.currentTime + 0.4);
+  } catch(e){}
+
+  // Auto close after 6s
+  clearTimeout(window._bangTimer);
+  window._bangTimer = setTimeout(closeBang, 6000);
+}
+
+function closeBang(){
+  document.getElementById('bang-popup').classList.remove('show');
+  clearTimeout(window._bangTimer);
+}
+
+// INIT
 window.addEventListener('load',()=>{
   const saved=localStorage.getItem('td_key');
   if(saved){S.apiKey=saved;document.getElementById('api-in').value=saved;launch()}
 });
 </script>
+
+<!-- BANG POPUP -->
+<div id="bang-popup">
+  <div id="bang-bg" onclick="closeBang()"></div>
+  <div id="bang-box">
+    <div id="bang-word">BANG</div>
+    <div id="bang-hl">▼ LOWER</div>
+    <div id="bang-sym">EUR/USD</div>
+    <div id="bang-conf">Confidence: 85%</div>
+    <div id="bang-rr">RR 1:2 &nbsp;|&nbsp; SL: 1.08000 &nbsp;|&nbsp; TP: 1.07800</div>
+    <button id="bang-close" onclick="closeBang()">✓ รับทราบ</button>
+  </div>
+</div>
+
 </body>
-</html> 
+</html>
